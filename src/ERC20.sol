@@ -13,12 +13,15 @@ contract ERC20 {
     bool private paused;
     mapping(address => uint256) public nonces;
 
+    bytes32 public DOMAIN_SEPARATOR;
+
     event Paused(address account);
     event Transfer(address sender, address recipient, uint256 amount);
     event Approval(address owner, address spender, uint256 amount);
     event TransferFrom(address sender, address recipient, uint256 amount);
 
     modifier whenNotPaused() {
+        require(msg.sender == owner, "Only Owner");
         require(!paused, "ERC20: paused");
         _;
     }
@@ -30,6 +33,23 @@ contract ERC20 {
         totalSupply = 1000 ether;
         paused = false;
         owner = msg.sender;
+
+        uint256 chainId;
+        assembly {
+            chainId := chainid()
+        }
+
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                ),
+                keccak256(bytes(_name)),
+                keccak256(bytes("1")),
+                chainId,
+                address(this)
+            )
+        );
     }
 
     function transfer(
@@ -40,6 +60,7 @@ contract ERC20 {
             balances[msg.sender] >= amount,
             "ERC20: transfer amount exceeds balance"
         );
+        require(recipient != address(0), "Recipient is must not zero address");
         balances[msg.sender] -= amount;
         balances[recipient] += amount;
         emit Transfer(msg.sender, recipient, amount);
@@ -87,8 +108,11 @@ contract ERC20 {
 
     function _toTypedDataHash(
         bytes32 structHash
-    ) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked("\x19\x01", structHash));
+    ) public view returns (bytes32) {
+        return
+            keccak256(
+                abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash)
+            );
     }
 
     function permit(
